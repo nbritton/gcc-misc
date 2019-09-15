@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Name: GCC Option Flags Checker, Version: 1
+# Author: Nikolas Britton
+#     E-mail: ytvzwld.mcteezy@rxltw.nzx (caesar, 11)
+#     E-mail: jxneppkj@ienwjpeo.yki (caesar, 22)
+#     Website: http://www.exabit.io
+# Copyright 2019 Nikolas Britton, Apache 2.0 License
+
+# Discription:
+# This script will show you what option flags GCC enables when you pass it arguments.
+
+# Usage:
+# This script is mainly geared for doing a differential comparison, for example:
+# ./gcc-ofc '-gcc-bin=gcc-8 -march=sandybridge -O2' '-gcc-bin=gcc-9 -march=ivybridge -O3'
+#
+# If comparing just two options, you can pass them without single qoutes, for example:
+# ./gcc-ofc -march=sandybridge -march=ivybridge
+
+# If passing more then two options then you need to use single quotes. Additionally,
+# if you want to test a diffrent GCC version then pass the -gcc-bin=<gcc_binary_name>,
+# otherwise if you don't set this it will default to "gcc", i.e. /usr/bin/gcc.
+
+
+temp="/tmp/gcc-ofc";
+
+return-gcc-option-flags() {
+
+    for arg do
+        shift
+        case "${arg}" in
+            (*-gcc-bin=*)
+	        gcc_binary=${arg//*=/} ;;
+            (*) set -- "$@" "$arg" ;;
+        esac
+    done
+
+    echo -e "int main {return 0;}" | $(which ${gcc_binary:=gcc} || echo false) $@ -x c -v -Q - > ${temp} 2>&1;
+
+    echo "GCC Version:";
+    awk '/compiled by/ {$1=$1; split($0,a,","); for(i in a){ print a[i]; } exit}' ${temp} | sed 's/compiled by//';
+    echo;
+
+    echo "GCC Options Passed:";
+    grep -Pzo "options passed:(.|\n)*\n.*enabled:" ${temp} | tr " " "\n" | awk '/^-./ {print|"sort -u"}';
+    echo;
+
+    echo "GCC Options Enabled:";
+    grep -Pzo "options enabled:(.|\n)*\n.*checksum:.*" ${temp} | tr " " "\n" | awk '/^-./ {print|"sort -u"}';
+    echo;
+
+    grep -Pzo "options enabled:(.|\n)*\n.*checksum:.*" ${temp} | tail -n 1 | sed 's/Compiler executable c/C/';
+    echo;
+
+}
+
+echo "Operating System:";
+echo "$($(which lsb_release || echo false) -d | awk '{$1=""}; {printf $0" | "} system ("uname -r");')";
+echo;
+
+echo "Processor(s):";
+echo " $($(which dmidecode || echo false) -qs processor-version | uniq -c | awk '{$1=$1"x"};1';)";
+echo;
+
+echo "Supported Processor Instructions:";
+echo "$(awk '{if(match($1,"^flags")) {print $0|"sort -u"}}' /proc/cpuinfo | tr ' ' '\n' | grep -v : | sort -V)" | column -c 130;
+echo;
+
+echo "GCC Option Flags Diffrential:";
+echo;
+
+return-gcc-option-flags $1 > ${temp}1;
+return-gcc-option-flags $2 > ${temp}2;
+
+diff --color --left-column --side-by-side --text ${temp}1 ${temp}2;
+
+rm ${temp} ${temp}1 ${temp}2;
